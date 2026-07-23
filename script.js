@@ -2,6 +2,9 @@
   try {
     document.body.classList.add("js-ready");
 
+    const yearEl = document.querySelector("[data-year]");
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+
     const header = document.querySelector("[data-header]");
     const nav = document.querySelector("[data-nav]");
     const toggle = document.querySelector("[data-nav-toggle]");
@@ -41,26 +44,26 @@
         setNavOpen(!isOpen);
       });
 
-    nav.addEventListener("click", (e) => {
-      const target = e.target;
-      if (target instanceof HTMLElement && target.matches("a[href^='#']")) {
-        setNavOpen(false);
-      }
-    });
+      nav.addEventListener("click", (e) => {
+        const target = e.target;
+        if (target instanceof HTMLElement && target.matches("a[href^='#']")) {
+          setNavOpen(false);
+        }
+      });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") setNavOpen(false);
-    });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") setNavOpen(false);
+      });
 
-    document.addEventListener("click", (e) => {
-      if (window.innerWidth >= 768) return;
-      const target = e.target;
-      if (!(target instanceof Node)) return;
-      const clickedToggle = toggle.contains(target);
-      const clickedNav = nav.contains(target);
-      if (!clickedToggle && !clickedNav) setNavOpen(false);
-    });
-  }
+      document.addEventListener("click", (e) => {
+        if (window.innerWidth >= 768) return;
+        const target = e.target;
+        if (!(target instanceof Node)) return;
+        const clickedToggle = toggle.contains(target);
+        const clickedNav = nav.contains(target);
+        if (!clickedToggle && !clickedNav) setNavOpen(false);
+      });
+    }
 
     const updateScrolledHeader = () => {
       if (!header) return;
@@ -155,7 +158,6 @@
 
         if (reelsModalVideo instanceof HTMLVideoElement && videoSrc) {
           reelsModalVideo.pause();
-          // Use encodeURI so filenames with spaces resolve correctly.
           reelsModalVideo.src = encodeURI(videoSrc);
           reelsModalVideo.load();
           reelsModalVideo.play().catch(() => {});
@@ -195,7 +197,6 @@
           document.activeElement instanceof HTMLElement ? document.activeElement : null;
         if (modalPanel instanceof HTMLElement) modalPanel.focus();
         if (modalVideo instanceof HTMLVideoElement) {
-          // Autoplay may be blocked; ignore errors.
           modalVideo.currentTime = 0;
           modalVideo.play().catch(() => {});
         }
@@ -215,7 +216,7 @@
       el.addEventListener("click", () => setModalOpen(false));
     }
 
-    // Scrollspy: highlight active section link
+    // Scrollspy
     if ("IntersectionObserver" in window && navLinks.length) {
       const linkById = new Map();
       for (const link of navLinks) {
@@ -254,8 +255,6 @@
       );
 
       for (const section of sections) observer.observe(section);
-
-      // Default active state near top
       setActive(sections[0]?.id || "");
     }
 
@@ -263,7 +262,7 @@
       if (window.innerWidth >= 768) setNavOpen(false);
     });
 
-    // Contact form: mailto fallback (no backend)
+    // Contact form: mailto fallback
     const form = document.getElementById("contact-form");
     const hint = document.querySelector("[data-form-hint]");
     if (form instanceof HTMLFormElement) {
@@ -274,16 +273,29 @@
         const email = String(fd.get("email") || "").trim();
         const message = String(fd.get("message") || "").trim();
 
-        const subject = encodeURIComponent(`Portfolio inquiry${name ? ` — ${name}` : ""}`);
-        const body = encodeURIComponent(
-          `${message || "(No message)"}\n\n---\nFrom: ${name || "(no name)"}\nEmail: ${
-            email || "(no email)"
-          }\n`,
-        );
+        const mailtoFallback = () => {
+          const subject = encodeURIComponent(`Portfolio inquiry${name ? ` — ${name}` : ""}`);
+          const body = encodeURIComponent(
+            `${message || "(No message)"}\n\n---\nFrom: ${name || "(no name)"}\nEmail: ${
+              email || "(no email)"
+            }\n`,
+          );
+          const to = "yamoahkwasi150@gmail.com";
+          window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+          if (hint) hint.textContent = "Opening your email client…";
+        };
 
-        const to = "yamoahkwasi150@gmail.com";
-        window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
-        if (hint) hint.textContent = "Opening your email client…";
+        fetch("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(fd).toString(),
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error("Form submission failed");
+            if (hint) hint.textContent = "Thanks — I'll get back to you soon.";
+            form.reset();
+          })
+          .catch(mailtoFallback);
       });
     }
 
@@ -298,12 +310,67 @@
         if (reelsModal && reelsModal.classList.contains("is-open")) setReelsModalOpen(false);
       }
     });
+
+    // ─── PRODUCT SCREENSHOT SLIDER ───
+    const sliderEl = document.querySelector('[data-slider]');
+    if (sliderEl) {
+      const track = sliderEl.querySelector('[data-slider-track]');
+      const slides = Array.from(track.querySelectorAll('.slider-slide'));
+      const dotsContainer = sliderEl.querySelector('[data-slider-dots]');
+      const counter = sliderEl.querySelector('[data-slider-counter]');
+      const prevBtn = sliderEl.querySelector('[data-slider-prev]');
+      const nextBtn = sliderEl.querySelector('[data-slider-next]');
+      let current = 0;
+      let autoTimer = null;
+
+      // Build dots
+      slides.forEach((_, i) => {
+        const dot = document.createElement('button');
+        dot.className = 'slider-dot' + (i === 0 ? ' is-active' : '');
+        dot.setAttribute('role', 'tab');
+        dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+        dot.addEventListener('click', () => goTo(i));
+        dotsContainer.appendChild(dot);
+      });
+
+      const dots = Array.from(dotsContainer.querySelectorAll('.slider-dot'));
+
+      const goTo = (index) => {
+        current = (index + slides.length) % slides.length;
+        track.style.transform = `translateX(-${current * 100}%)`;
+        dots.forEach((d, i) => d.classList.toggle('is-active', i === current));
+        if (counter) counter.textContent = `${current + 1} / ${slides.length}`;
+      };
+
+      prevBtn?.addEventListener('click', () => { goTo(current - 1); resetAuto(); });
+      nextBtn?.addEventListener('click', () => { goTo(current + 1); resetAuto(); });
+
+      const resetAuto = () => {
+        clearInterval(autoTimer);
+        autoTimer = setInterval(() => goTo(current + 1), 4000);
+      };
+
+      // Touch/swipe support
+      let touchStartX = 0;
+      sliderEl.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+      sliderEl.addEventListener('touchend', (e) => {
+        const diff = touchStartX - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) { goTo(diff > 0 ? current + 1 : current - 1); resetAuto(); }
+      });
+
+      // Pause on hover
+      sliderEl.addEventListener('mouseenter', () => clearInterval(autoTimer));
+      sliderEl.addEventListener('mouseleave', () => resetAuto());
+
+      goTo(0);
+      resetAuto();
+    }
+
   } catch (error) {
     document.body.classList.remove("js-ready");
     for (const item of document.querySelectorAll(".section, .site-footer")) {
       item.classList.add("is-visible");
     }
-    // eslint-disable-next-line no-console
     console.error("Portfolio init failed; falling back to static render", error);
   }
 })();
